@@ -1,0 +1,256 @@
+preferences:
+  - title: "Software Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      include: ["python", "backend", "full stack", "fullstack", "ml", "ai", "systems"]
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "Data Scientist"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 2
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "ML Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 2
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "AI Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "AI Developer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "AI/ML Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "Forward Deployed Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "FDE"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "Machine Learning Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "Applied Scientist"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+  - title: "Research Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+    experience:
+      min: 0
+      max: 3
+    keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+
+
