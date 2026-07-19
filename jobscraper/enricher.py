@@ -121,7 +121,15 @@ TASK: Evaluate this job against the user's preferences and return a JSON object:
 RULES FOR RELEVANCE:
 - The job title must genuinely match one of the user's preferred roles (not just share a word — "Sales Engineer" is NOT an "AI Engineer")
 - The location must match one of the preferred locations for that role (or be Remote)
-- If experience is stated and exceeds the user's max preference, mark as NOT relevant
+- EXPERIENCE RULE: A job is relevant as long as its MINIMUM experience requirement fits within the user's max preference range.
+  For example, if the user's max is 3 years:
+    - "2-5+ years" → RELEVANT (minimum is 2, which is <= 3)
+    - "3+ years" → RELEVANT (minimum is 3, which is <= 3)
+    - "3 years" → RELEVANT (3 <= 3)
+    - "at least 3 years" → RELEVANT (3 <= 3)
+    - "5+ years" → NOT relevant (minimum is 5, which exceeds 3)
+    - "4-7 years" → NOT relevant (minimum is 4, which exceeds 3)
+  In short: compare only the MINIMUM years stated against the user's max preference. If min <= user's max, it's relevant.
 - If the title contains seniority levels the user wants to exclude (senior, staff, principal, lead, director, manager, Sr., etc.), mark as NOT relevant
 - If the company_roles restriction is set, the job must match one of those specific roles
 - When in doubt about title match, consider the actual job responsibilities described
