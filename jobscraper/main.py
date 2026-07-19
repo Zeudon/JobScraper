@@ -7,6 +7,7 @@ import time
 
 from jobscraper.browser import navigate_and_extract
 from jobscraper.config import Company, load_companies, load_filters
+from jobscraper.enricher import enrich_and_judge_jobs
 from jobscraper.extractor import extract_jobs_from_snapshot, llm_plan_navigation
 from jobscraper.filter import filter_jobs
 from jobscraper.storage import load_existing_urls, save_new_jobs
@@ -48,15 +49,22 @@ async def scrape_company(
         print(f"  No jobs extracted for {company.name}")
         return 0
 
-    # Step 3: Filter based on preferences + company roles
+    # Step 3: Deterministic pre-filter (loose pass to narrow candidates)
     filtered = filter_jobs(all_jobs, preferences, company.roles)
-    print(f"  After filtering: {len(filtered)} / {len(all_jobs)} jobs match preferences")
+    print(f"  Pre-filter: {len(filtered)} / {len(all_jobs)} jobs are potential matches")
 
     # Step 4: Deduplicate against existing
     new_jobs = [j for j in filtered if j.url not in existing_urls]
     print(f"  New (not previously scraped): {len(new_jobs)} jobs")
 
-    # Step 5: Save
+    # Step 5: LLM judgment — visit each candidate's detail page
+    # The LLM reads the full job description and decides:
+    #   - Is this genuinely relevant to the user's preferences?
+    #   - What's the experience requirement?
+    if new_jobs:
+        new_jobs = await enrich_and_judge_jobs(new_jobs, preferences, company.roles)
+
+    # Step 6: Save
     saved = save_new_jobs(new_jobs)
 
     # Update existing URLs for subsequent companies

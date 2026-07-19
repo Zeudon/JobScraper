@@ -160,14 +160,16 @@ def filter_jobs(
     preferences: list[RolePreference],
     company_roles: list[str],
 ) -> list[JobOpening]:
-    """Filter jobs based on YAML preferences and per-company role restrictions.
+    """Pre-filter jobs using fast deterministic checks.
 
-    Filter hierarchy:
-    1. If company_roles is non-empty, the job title must match at least one role
-       in company_roles (this is a per-company restriction).
-    2. The job must also match at least one YAML preference (title, location,
-       experience, keywords).
-    3. If company_roles is empty, only YAML preferences are used.
+    This is a LOOSE first pass to narrow candidates before the LLM makes
+    the final relevance judgment on the detail page. We only reject jobs
+    that are obviously irrelevant:
+    1. Title doesn't match any preferred role (not even loosely)
+    2. Title contains excluded seniority keywords (senior, staff, etc.)
+
+    Location and experience are NOT checked here — the LLM will assess
+    those with full context from the job description.
     """
     filtered = []
 
@@ -180,25 +182,20 @@ def filter_jobs(
             if not role_match:
                 continue
 
-        # Step 2: Match against YAML preferences
-        matched = False
+        # Step 2: Title must match at least one YAML preference
+        title_matched = False
         for pref in preferences:
             if not _title_matches(job.title, pref.title):
                 continue
 
-            if not _location_matches(job.location, pref.locations):
-                continue
-
-            if not _experience_matches(job.experience, pref.experience_min, pref.experience_max):
-                continue
-
+            # Only check hard excludes (seniority keywords)
             if not _keyword_check(job.title, pref):
                 continue
 
-            matched = True
+            title_matched = True
             break
 
-        if matched:
+        if title_matched:
             filtered.append(job)
 
     return filtered
