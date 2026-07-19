@@ -22,29 +22,31 @@ async def scrape_company(
     """Scrape a single company and return count of new jobs saved."""
     print(f"\n{'='*60}")
     print(f"Scraping: {company.name}")
-    print(f"URL: {company.careers_url}")
+    print(f"URLs: {', '.join(company.careers_urls)}")
     if company.roles:
         print(f"Roles filter: {', '.join(company.roles)}")
     print(f"{'='*60}")
 
-    # Step 1: Navigate the careers site and get job listing pages
-    snapshots = await navigate_and_extract(
-        careers_url=company.careers_url,
-        company_name=company.name,
-        role_hints=company.roles,
-        llm_planner=llm_plan_navigation,
-    )
-
-    if not snapshots:
-        print(f"  No job listing pages found for {company.name}")
-        return 0
-
-    # Step 2: Extract jobs from each page snapshot
+    # Step 1: Navigate each careers URL and get job listing pages
     all_jobs = []
-    for snapshot in snapshots:
-        jobs = extract_jobs_from_snapshot(snapshot, company.name)
-        print(f"  Extracted {len(jobs)} jobs from {snapshot.url}")
-        all_jobs.extend(jobs)
+    for careers_url in company.careers_urls:
+        print(f"\n  --- {careers_url} ---")
+        snapshots = await navigate_and_extract(
+            careers_url=careers_url,
+            company_name=company.name,
+            role_hints=company.roles,
+            llm_planner=llm_plan_navigation,
+        )
+
+        if not snapshots:
+            print(f"  No job listing pages found at {careers_url}")
+            continue
+
+        # Step 2: Extract jobs from each page snapshot
+        for snapshot in snapshots:
+            jobs = extract_jobs_from_snapshot(snapshot, company.name)
+            print(f"  Extracted {len(jobs)} jobs from {snapshot.url}")
+            all_jobs.extend(jobs)
 
     if not all_jobs:
         print(f"  No jobs extracted for {company.name}")

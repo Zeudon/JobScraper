@@ -141,7 +141,7 @@ async def discover_missing_careers_urls(companies: list) -> list:
     from jobscraper.config import COMPANIES_FILE
     from openpyxl import load_workbook
 
-    missing = [c for c in companies if not c.careers_url]
+    missing = [c for c in companies if not c.careers_urls]
     if not missing:
         return companies
 
@@ -153,7 +153,7 @@ async def discover_missing_careers_urls(companies: list) -> list:
         print(f"  Searching: {company.name}...")
         url = await find_careers_url(company.name)
         if url:
-            company.careers_url = url
+            company.careers_urls = [url]
             updates[company.name] = url
             print(f"    Found: {url}")
         else:
@@ -183,5 +183,5 @@ async def discover_missing_careers_urls(companies: list) -> list:
             print(f"  Warning: Could not update Excel file: {e}")
 
     # Remove companies that still have no URL
-    companies = [c for c in companies if c.careers_url]
+    companies = [c for c in companies if c.careers_urls]
     return companies

@@ -31,7 +31,7 @@ class RolePreference:
 class Company:
     """A company entry from the Excel file."""
     name: str
-    careers_url: str
+    careers_urls: list[str] = field(default_factory=list)  # comma-separated in Excel
     roles: list[str] = field(default_factory=list)  # empty = use YAML defaults
 
 
@@ -79,15 +79,18 @@ def load_companies() -> list[Company]:
     companies = []
     for row in rows[1:]:
         name = str(row[name_idx]).strip() if row[name_idx] else ""
-        url = str(row[url_idx]).strip() if row[url_idx] else ""
+        url_raw = str(row[url_idx]).strip() if row[url_idx] else ""
         if not name:
             continue
+
+        # Support multiple careers URLs separated by commas
+        careers_urls = [u.strip() for u in url_raw.split(",") if u.strip()]
 
         roles = []
         if roles_idx is not None and roles_idx < len(row) and row[roles_idx]:
             roles = [r.strip() for r in str(row[roles_idx]).split(",") if r.strip()]
 
-        companies.append(Company(name=name, careers_url=url, roles=roles))
+        companies.append(Company(name=name, careers_urls=careers_urls, roles=roles))
 
     wb.close()
     return companies
