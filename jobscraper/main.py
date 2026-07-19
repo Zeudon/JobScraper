@@ -7,6 +7,7 @@ import time
 
 from jobscraper.browser import navigate_and_extract
 from jobscraper.config import Company, load_companies, load_filters
+from jobscraper.discover import discover_missing_careers_urls
 from jobscraper.enricher import enrich_and_judge_jobs
 from jobscraper.extractor import extract_jobs_from_snapshot, llm_plan_navigation
 from jobscraper.filter import filter_jobs
@@ -92,6 +93,9 @@ async def run(company_filter: str | None = None):
             print(f"No company matching '{company_filter}' found.")
             return
         print(f"Filtered to {len(companies)} company/companies matching '{company_filter}'")
+
+    # Discover careers URLs for companies that don't have one
+    companies = await discover_missing_careers_urls(companies)
 
     existing_urls = load_existing_urls()
     print(f"Existing job entries: {len(existing_urls)}")

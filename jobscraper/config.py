@@ -80,7 +80,7 @@ def load_companies() -> list[Company]:
     for row in rows[1:]:
         name = str(row[name_idx]).strip() if row[name_idx] else ""
         url = str(row[url_idx]).strip() if row[url_idx] else ""
-        if not name or not url:
+        if not name:
             continue
 
         roles = []
