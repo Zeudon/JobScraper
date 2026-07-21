@@ -61,7 +61,19 @@ def save_new_jobs(jobs: list[JobOpening]) -> int:
     path = _ensure_file()
     existing_urls = load_existing_urls()
 
-    new_jobs = [j for j in jobs if j.url not in existing_urls]
+    # Filter out URLs already persisted AND de-duplicate within this batch —
+    # the same job can arrive twice (e.g. overlapping "Load More" snapshots or
+    # a job listed under multiple department pages), which would otherwise
+    # write duplicate rows.
+    new_jobs = []
+    seen_urls: set[str] = set()
+    for job in jobs:
+        url = (job.url or "").strip()
+        if not url or url in existing_urls or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        new_jobs.append(job)
+
     if not new_jobs:
         return 0
 

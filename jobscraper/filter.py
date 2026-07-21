@@ -1,8 +1,11 @@
 """Filter extracted jobs against user preferences (YAML + per-company roles)."""
 
 import re
+from datetime import datetime, timedelta
 
-from jobscraper.config import RolePreference
+from dateutil import parser as dateutil_parser
+
+from jobscraper.config import RolePreference, get_env
 from jobscraper.storage import JobOpening
 
 
@@ -197,5 +200,61 @@ def filter_jobs(
 
         if title_matched:
             filtered.append(job)
+
+    return filtered
+
+
+def _parse_relative_date(date_str: str) -> datetime | None:
+    """Parse relative date strings like '3 days ago', '2 weeks ago'."""
+    date_lower = date_str.lower().strip()
+    match = re.search(r'(\d+)\s*(day|week|month|hour|minute)s?\s*ago', date_lower)
+    if not match:
+        return None
+
+    amount = int(match.group(1))
+    unit = match.group(2)
+    now = datetime.now()
+
+    if unit == "day":
+        return now - timedelta(days=amount)
+    elif unit == "week":
+        return now - timedelta(weeks=amount)
+    elif unit == "month":
+        return now - timedelta(days=amount * 30)
+    elif unit in ("hour", "minute"):
+        return now  # posted today
+    return None
+
+
+def filter_by_date(jobs: list[JobOpening]) -> list[JobOpening]:
+    """Filter out jobs older than MAX_JOB_AGE_DAYS (default 30).
+
+    Jobs with no date or unparseable dates are kept (benefit of the doubt).
+    """
+    max_age = int(get_env("MAX_JOB_AGE_DAYS", "30"))
+    cutoff = datetime.now() - timedelta(days=max_age)
+    filtered = []
+
+    for job in jobs:
+        if not job.date_posted:
+            filtered.append(job)
+            continue
+
+        # Try relative date first ("3 days ago")
+        parsed = _parse_relative_date(job.date_posted)
+
+        # Try absolute date parsing
+        if parsed is None:
+            try:
+                parsed = dateutil_parser.parse(job.date_posted, fuzzy=True)
+            except (ValueError, OverflowError):
+                pass
+
+        if parsed is None:
+            # Can't parse — keep the job
+            filtered.append(job)
+        elif parsed >= cutoff:
+            filtered.append(job)
+        # else: job is older than cutoff, skip it
 
     return filtered

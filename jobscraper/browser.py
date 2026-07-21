@@ -13,10 +13,13 @@ from dataclasses import dataclass
 from playwright.async_api import Page, BrowserContext, async_playwright
 
 from jobscraper.config import get_env
+from jobscraper.llm import LLMUnavailableError
 
 PAGE_LOAD_TIMEOUT = 30_000  # ms
-MAX_CONTENT_LENGTH = 40_000  # chars — large pages (Apple, Amazon) can have 100+ roles
-MAX_PAGINATION_PAGES = 50  # max pages to follow for pagination per department
+MAX_CONTENT_LENGTH = 90_000  # chars — large pages (Apple, Amazon) can have 100+ roles;
+                             # Gemini's 1M context easily holds this. Extraction then
+                             # slices to EXTRACT_CONTENT_CHARS.
+MAX_PAGINATION_PAGES = int(get_env("MAX_PAGINATION_PAGES", "20"))  # per department, configurable via .env
 
 
 @dataclass
@@ -87,7 +90,7 @@ async def _extract_page_snapshot(page: Page) -> PageSnapshot:
     text_content = await page.evaluate("""() => {
         const clone = document.body.cloneNode(true);
         clone.querySelectorAll('script, style, noscript, svg, img, header, nav, footer, [class*="nav"], [class*="footer"], [class*="cookie"]').forEach(el => el.remove());
-        return clone.innerText.substring(0, 60000);
+        return clone.innerText.substring(0, 100000);
     }""")
 
     # Get all links with text, href, and context from surrounding elements
@@ -126,8 +129,14 @@ async def _extract_page_snapshot(page: Page) -> PageSnapshot:
 
 
 def _content_hash(text: str) -> str:
-    """Hash text content to detect changes."""
-    return hashlib.md5(text[:5000].encode()).hexdigest()
+    """Hash full text content to detect changes.
+
+    Must hash the ENTIRE captured text, not just a prefix: "Load More" /
+    infinite-scroll pages append new jobs at the bottom while the top stays
+    identical. Hashing only a prefix would treat the grown page as unchanged
+    and stop pagination early, dropping every job loaded after the first click.
+    """
+    return hashlib.md5(text.encode()).hexdigest()
 
 
 async def _click_target(page: Page, target: str) -> bool:
@@ -396,6 +405,8 @@ async def navigate_and_extract(
                 fallback_snapshot = await _extract_page_snapshot(page)
                 all_snapshots.append(fallback_snapshot)
 
+        except LLMUnavailableError:
+            raise  # let the circuit breaker abandon this company
         except Exception as e:
             print(f"  Error navigating {company_name}: {e}")
         finally:

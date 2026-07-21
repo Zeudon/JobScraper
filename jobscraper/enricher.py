@@ -15,6 +15,11 @@ from jobscraper.storage import JobOpening
 
 PAGE_LOAD_TIMEOUT = 20_000
 
+# Characters of the job description sent to the LLM for the relevance judgment.
+# Sized for Gemini's free tier (1M context, 250K TPM). For Groq's 8K-TPM tier,
+# drop back to ~6000. Tune via .env.
+DETAIL_CONTENT_CHARS = int(get_env("DETAIL_CONTENT_CHARS", "24000"))
+
 
 def _format_preferences_for_prompt(preferences: list[RolePreference], company_roles: list[str]) -> str:
     """Format user preferences into a clear prompt section."""
@@ -63,7 +68,7 @@ async def enrich_and_judge_jobs(
     if not jobs:
         return []
 
-    from jobscraper.extractor import _call_llm, _parse_json_from_response
+    from jobscraper.llm import LLMUnavailableError, call_llm, parse_json_from_response
 
     prefs_text = _format_preferences_for_prompt(preferences, company_roles)
 
@@ -92,7 +97,7 @@ async def enrich_and_judge_jobs(
                 text = await page.evaluate("""() => {
                     const clone = document.body.cloneNode(true);
                     clone.querySelectorAll('script, style, noscript, svg, img, header, nav, footer, [class*="cookie"], [class*="banner"]').forEach(el => el.remove());
-                    return clone.innerText.substring(0, 8000);
+                    return clone.innerText.substring(0, 30000);
                 }""")
 
                 # Ask LLM to judge relevance and extract details
@@ -105,7 +110,7 @@ JOB POSTING:
   Listed Location: {job.location or 'Not specified on listing'}
 
 FULL JOB DESCRIPTION:
-{text[:6000]}
+{text[:DETAIL_CONTENT_CHARS]}
 
 {prefs_text}
 
@@ -137,8 +142,8 @@ RULES FOR RELEVANCE:
 Return ONLY the JSON object.
 """
 
-                response = _call_llm(prompt)
-                data = _parse_json_from_response(response)
+                response = call_llm(prompt)
+                data = parse_json_from_response(response)
 
                 is_relevant = data.get("relevant", False)
                 experience = data.get("experience_required", "")
@@ -154,6 +159,11 @@ Return ONLY the JSON object.
                 else:
                     print(f"    [NO]  {job.title} | {reason}")
 
+            except LLMUnavailableError:
+                # Circuit breaker tripped — stop enriching and abandon this
+                # company. Close the browser first so we don't leak it.
+                await browser.close()
+                raise
             except Exception as e:
                 # If we can't visit the page, keep the job (benefit of the doubt)
                 err_msg = str(e).encode('ascii', errors='replace').decode()

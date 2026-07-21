@@ -1,66 +1,74 @@
-"""LLM-powered job extraction and navigation planning using Google Gemini."""
+"""LLM-powered job extraction and navigation planning."""
 
-import json
 import re
-import time
-
-from google import genai
+from datetime import datetime
 
 from jobscraper.browser import NavigationPlan, PageSnapshot
 from jobscraper.config import get_env
+from jobscraper.llm import LLMUnavailableError, call_llm, parse_json_from_response
 from jobscraper.storage import JobOpening
 
-_client = None
+# How much page text / how many links to send to the LLM. Sized for Gemini's
+# free tier (gemini-flash-latest: 1M-token context, 250K tokens/minute) — content
+# size is no longer the bottleneck, so we send full page snapshots to capture
+# every job on dense pages (Apple, Amazon). The binding limit is now requests/min
+# (10 RPM) and requests/day (1,500 RPD), governed by pacing, not size.
+# For Groq's 8K-TPM free tier, drop these back to ~8000/5000 and links to ~80/60.
+PLAN_CONTENT_CHARS = int(get_env("PLAN_CONTENT_CHARS", "16000"))
+EXTRACT_CONTENT_CHARS = int(get_env("EXTRACT_CONTENT_CHARS", "60000"))
+# Max links included per prompt.
+PLAN_MAX_LINKS = int(get_env("PLAN_MAX_LINKS", "120"))
+EXTRACT_MAX_LINKS = int(get_env("EXTRACT_MAX_LINKS", "250"))
 
-MAX_RETRIES = 3
-RETRY_DELAY = 8  # seconds
+# Departments that are clearly non-technical — skip these pages.
+# These are matched as whole words/path segments to avoid false positives
+# (e.g., "hr" inside "anthropic" or "chrome").
+_NON_TECHNICAL_DEPTS = [
+    "retail", "sales", "marketing", "legal", "finance", "accounting",
+    "human resources", "facilities", "real estate", "procurement",
+    "communications", "compliance", "administrative", "customer service",
+    "support operations", "applecare",
+]
 
-
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        api_key = get_env("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not set in .env file")
-        _client = genai.Client(api_key=api_key)
-    return _client
-
-
-def _get_model() -> str:
-    return get_env("LLM_MODEL", "gemini-3.5-flash")
-
-
-def _call_llm(prompt: str) -> str:
-    """Call Gemini with retry on rate limit errors."""
-    client = _get_client()
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = client.models.generate_content(
-                model=_get_model(),
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                if attempt < MAX_RETRIES - 1:
-                    wait = RETRY_DELAY * (attempt + 1)
-                    print(f"    Rate limited, retrying in {wait}s...")
-                    time.sleep(wait)
-                    continue
-            raise
-    return ""
+# Phrases indicating no jobs on a page
+_NO_JOBS_PHRASES = [
+    "no open positions", "no jobs found", "no results found", "0 results",
+    "no openings available", "no positions available", "no current openings",
+    "currently no open", "no matching jobs", "no vacancies",
+]
 
 
-def _parse_json_from_response(text: str) -> list | dict:
-    """Extract JSON from LLM response, handling markdown code blocks."""
-    # Try to find JSON in code blocks first
-    match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', text)
-    if match:
-        text = match.group(1)
+def _is_non_technical_page(url: str, title: str) -> str | None:
+    """Check if URL or title indicates a non-technical department.
 
-    # Clean up and parse
-    text = text.strip()
-    return json.loads(text)
+    Uses word-boundary matching to avoid false positives.
+    """
+    combined = f"{url} {title}".lower()
+    for dept in _NON_TECHNICAL_DEPTS:
+        # Match as whole word(s) using word boundaries
+        if re.search(r'\b' + re.escape(dept) + r'\b', combined):
+            return dept
+    return None
+
+
+def should_skip_page(snapshot: PageSnapshot) -> str | None:
+    """Check if a page should be skipped before LLM extraction.
+
+    Returns a reason string if the page should be skipped, None otherwise.
+    """
+    text_lower = snapshot.text_content.lower()
+
+    # Check for explicit "no jobs" messages
+    for phrase in _NO_JOBS_PHRASES:
+        if phrase in text_lower:
+            return f"page says '{phrase}'"
+
+    # Check if URL/title indicates a non-technical department
+    dept = _is_non_technical_page(snapshot.url, snapshot.title)
+    if dept:
+        return f"non-technical department ({dept})"
+
+    return None
 
 
 async def llm_plan_navigation(
@@ -92,10 +100,10 @@ async def llm_plan_navigation(
         else:
             other_links.append(link)
 
-    prioritized = career_links + other_links[:40]
+    prioritized = career_links + other_links[:30]
     links_text = "\n".join(
         f'  - "{link["text"]}" -> {link["href"]}'
-        for link in prioritized[:150]
+        for link in prioritized[:PLAN_MAX_LINKS]
     )
 
     roles_context = ""
@@ -111,7 +119,7 @@ Current page: {snapshot.url}
 Page title: {snapshot.title}
 
 Page content (excerpt):
-{snapshot.text_content[:10000]}
+{snapshot.text_content[:PLAN_CONTENT_CHARS]}
 
 Links on this page:
 {links_text}
@@ -142,14 +150,15 @@ RULES:
   This could be department names, "View Jobs" buttons, accordion headers, tab names, etc.
 - If you see a link to an external job board (greenhouse.io, lever.co, boards.greenhouse.io, jobs.lever.co, myworkdayjobs.com), put that URL in job_listing_urls.
 - Include departments like Engineering, Technology, IT, Product, Data, Research, AI/ML, Platform, Infrastructure — any department that might have the roles we're looking for.
-- Do NOT include purely non-technical departments (Sales, Marketing, Legal, HR, Finance) unless we're specifically looking for those roles.
+- SKIP these non-technical departments entirely: Retail, Sales, Marketing, Legal, HR/People, Finance, Accounting, Real Estate, Facilities, Support/Customer Service, Administrative, Communications, Compliance, Procurement. These waste time on companies like Apple that have 20+ non-technical departments.
+- If the page has options to sort jobs by date (newest first), prefer URLs with those sort parameters.
 
 Return ONLY the JSON object.
 """
 
     try:
-        response = _call_llm(prompt)
-        data = _parse_json_from_response(response)
+        response = call_llm(prompt)
+        data = parse_json_from_response(response)
 
         # Extract URLs and validate them
         urls = [u for u in data.get("job_listing_urls", [])
@@ -165,6 +174,8 @@ Return ONLY the JSON object.
             elements_to_expand=elements if elements else None,
         )
 
+    except LLMUnavailableError:
+        raise  # circuit breaker tripped — abandon this company, don't degrade
     except Exception as e:
         print(f"  LLM planning error: {e}")
         # Fallback: treat main page as having jobs
@@ -200,15 +211,17 @@ def extract_jobs_from_snapshot(
     display_links = job_links + other_links
     links_text = "\n".join(
         f'  - "{link["text"]}" -> {link["href"]}'
-        for link in display_links[:250]
+        for link in display_links[:EXTRACT_MAX_LINKS]
     )
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
 
     prompt = f"""Extract ALL job openings from this careers page for {company_name}.
 
 Page URL: {snapshot.url}
 
 Page content:
-{snapshot.text_content[:20000]}
+{snapshot.text_content[:EXTRACT_CONTENT_CHARS]}
 
 Links on page:
 {links_text}
@@ -228,13 +241,14 @@ RULES:
 - If a link text IS a job title (e.g. "Backend Engineer - Distributed Systems"), include it.
 - Do NOT invent URLs — only use URLs that appear in the links list above.
 - If a job appears multiple times (same title + same URL), include it only once.
+- IMPORTANT: Extract "date_posted" whenever visible. Look for dates near each job listing — they may appear as "Posted 3 days ago", "Jul 15, 2026", "2026-07-15", etc. If a relative date is shown (e.g. "2 days ago"), convert it to absolute date (today is {today_str}).
 - Return ONLY the JSON array, no other text.
 - If there are NO job openings visible, return: []
 """
 
     try:
-        response = _call_llm(prompt)
-        jobs_data = _parse_json_from_response(response)
+        response = call_llm(prompt)
+        jobs_data = parse_json_from_response(response)
 
         if not isinstance(jobs_data, list):
             return []
@@ -262,6 +276,8 @@ RULES:
 
         return jobs
 
+    except LLMUnavailableError:
+        raise  # circuit breaker tripped — abandon this company, don't degrade
     except Exception as e:
         print(f"  LLM extraction error for {company_name}: {e}")
         return []

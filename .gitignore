@@ -2,5 +2,6 @@
 __pycache__/
 *.pyc
 data/Job_Openings.xlsx
+~$*.xlsx
 .venv/
 venv/

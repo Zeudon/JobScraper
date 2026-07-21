@@ -77,7 +77,7 @@ async def _search_duckduckgo(company_name: str) -> str | None:
 
 def _ask_llm_for_careers_url(company_name: str) -> str | None:
     """Ask the LLM for the company's careers page URL as a fallback."""
-    from jobscraper.extractor import _call_llm, _parse_json_from_response
+    from jobscraper.llm import call_llm, parse_json_from_response
 
     prompt = f"""What is the official careers/jobs page URL for {company_name}?
 
@@ -91,8 +91,8 @@ Rules:
 - Return ONLY the JSON object.
 """
     try:
-        response = _call_llm(prompt)
-        data = _parse_json_from_response(response)
+        response = call_llm(prompt)
+        data = parse_json_from_response(response)
         url = data.get("url")
         if url and url.startswith("http"):
             return url
