@@ -85,6 +85,38 @@ python -m jobscraper run -c ai                 # matches every name containing "
 
 Handy for re-running only the companies that got skipped in a previous run.
 
+### Scrape a single ad-hoc URL
+
+`--url` scrapes one URL directly against `filters.yaml`, with no Excel row
+required. Pass a **pre-filtered** careers/job-board URL (e.g. a Greenhouse or
+Lever board already narrowed by department/keyword) — the scraper paginates
+**that exact URL as-is** and never wanders off into other departments, so your
+filters are preserved:
+
+```bash
+python -m jobscraper run --url "https://boards.greenhouse.io/acme?departments[]=eng"
+```
+
+- **Pagination (20–30+ pages):** it follows Next / "Load More" buttons, and
+  falls back to incrementing `?page=`/`?offset=` params. Raise the cap for big
+  boards with `--max-pages`:
+
+  ```bash
+  python -m jobscraper run --url "<filtered-url>" --max-pages 30
+  ```
+- **`--name`** sets the Company label recorded for those jobs (otherwise it's
+  derived from the URL):
+
+  ```bash
+  python -m jobscraper run --url "<filtered-url>" --name "Acme Corp"
+  ```
+- **`--discover`** switches from direct-listing to full LLM department
+  discovery — use it only when the URL is a *generic* careers landing page
+  rather than an already-filtered listing.
+
+> Excluded-keyword titles (senior, staff, manager, lead, …) are dropped up front
+> from the listing itself — those jobs are never opened or sent to the LLM.
+
 ### Headed vs. headless (background) mode
 
 The browser mode is controlled by the `BROWSER_MODE` env var (default: `headed`).
@@ -160,7 +192,7 @@ Set these in `.env` (see `.env.example`). All are optional except the API key.
 | `LLM_MODEL`                                                                 | provider default                | e.g.`gemini-3.1-flash-lite`, `gemini-flash-latest`                                      |
 | `BROWSER_MODE`                                                              | `headed`                      | `headed` (visible) or `headless` (background)                                           |
 | `LLM_CALL_DELAY`                                                            | `5` (groq) / `6.5` (gemini) | Seconds between LLM calls, to stay under rate limits                                        |
-| `MAX_PAGINATION_PAGES`                                                      | `20`                          | Max listing pages to follow per department                                                  |
+| `MAX_PAGINATION_PAGES`                                                      | `20`                          | Max listing pages to follow per listing (override per-run with `--max-pages`)               |
 | `MAX_JOB_AGE_DAYS`                                                          | `30`                          | Drop postings older than this                                                               |
 | `MAX_CONSECUTIVE_LLM_FAILURES`                                              | `2`                           | Failures before a company is skipped (circuit breaker)                                      |
 | `EXTRACT_CONTENT_CHARS` / `PLAN_CONTENT_CHARS` / `DETAIL_CONTENT_CHARS` | see`.env.example`             | Page text sent to the LLM per prompt (shrink these for Groq's small free-tier token budget) |

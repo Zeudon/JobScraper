@@ -158,6 +158,44 @@ def _keyword_check(job_title: str, pref: RolePreference) -> bool:
     return True
 
 
+def build_global_excludes(preferences: list[RolePreference]) -> set[str]:
+    """Union of every role's exclude keywords plus their known abbreviations.
+
+    Used for a hard, preference-independent title gate: if ANY of these terms
+    appears in a job title, the job is dropped outright — no matter which
+    preference it might otherwise match, and regardless of whether that
+    preference happens to list the term. Guarantees that titles like
+    "Software Manager" or "Senior AI Engineer" are never explored further.
+    """
+    terms: set[str] = set()
+    for pref in preferences:
+        for kw in pref.keywords_exclude:
+            kw_lower = kw.lower().strip()
+            if not kw_lower:
+                continue
+            terms.add(kw_lower)
+            for abbr in _SENIORITY_ABBREVIATIONS.get(kw_lower, []):
+                terms.add(abbr.strip())
+    return terms
+
+
+def _title_is_excluded(job_title: str, excludes: set[str]) -> bool:
+    """True if the title contains any excluded term as a whole word.
+
+    Whole-word matching (via the normalized title) avoids false positives like
+    "lead" inside "leadership" or "misleading" that a plain substring check hits.
+    """
+    if not excludes:
+        return False
+    norm = _normalize_title(job_title)  # lowercased, punctuation -> spaces
+    for term in excludes:
+        if not term:
+            continue
+        if re.search(r'\b' + re.escape(term) + r'\b', norm):
+            return True
+    return False
+
+
 def filter_jobs(
     jobs: list[JobOpening],
     preferences: list[RolePreference],
@@ -176,7 +214,17 @@ def filter_jobs(
     """
     filtered = []
 
+    # Step 0: Hard title gate — drop anything whose title contains an excluded
+    # keyword (senior, staff, manager, ...) before any preference matching, so
+    # these are never enriched (no detail-page visit, no LLM call).
+    excludes = build_global_excludes(preferences)
+    excluded_count = 0
+
     for job in jobs:
+        if _title_is_excluded(job.title, excludes):
+            excluded_count += 1
+            continue
+
         # Step 1: Per-company role restriction
         if company_roles:
             role_match = any(
@@ -200,6 +248,9 @@ def filter_jobs(
 
         if title_matched:
             filtered.append(job)
+
+    if excluded_count:
+        print(f"  Title-excluded: {excluded_count} job(s) dropped on an excluded keyword")
 
     return filtered
 

@@ -9,6 +9,7 @@ Architecture:
 import asyncio
 import hashlib
 from dataclasses import dataclass
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from playwright.async_api import Page, BrowserContext, async_playwright
 
@@ -19,7 +20,77 @@ PAGE_LOAD_TIMEOUT = 30_000  # ms
 MAX_CONTENT_LENGTH = 90_000  # chars — large pages (Apple, Amazon) can have 100+ roles;
                              # Gemini's 1M context easily holds this. Extraction then
                              # slices to EXTRACT_CONTENT_CHARS.
-MAX_PAGINATION_PAGES = int(get_env("MAX_PAGINATION_PAGES", "20"))  # per department, configurable via .env
+
+
+def _max_pagination_pages() -> int:
+    """Read the pagination cap at CALL time, not import time.
+
+    Reading it here (rather than as a module constant) lets `--max-pages` set
+    MAX_PAGINATION_PAGES in the environment after this module is imported and
+    still take effect for the run.
+    """
+    return int(get_env("MAX_PAGINATION_PAGES", "20"))
+
+
+# Query-string parameter names commonly used for page-number pagination.
+_PAGE_NUMBER_PARAMS = {"page", "pg", "p", "pageno", "page_number", "pagenumber"}
+# Offset-style params, paired with a page-size param to know the step.
+_OFFSET_PARAMS = {"offset", "start", "from"}
+_PAGE_SIZE_PARAMS = {"limit", "per_page", "perpage", "pagesize", "page_size", "count"}
+
+
+def _increment_param_url(url: str) -> str | None:
+    """If the URL carries a recognizable pagination param, return the next-page URL.
+
+    Handles two common schemes:
+      - page-number:  ?page=2  -> ?page=3
+      - offset+size:  ?offset=25&limit=25 -> ?offset=50&limit=25
+    Returns None if no recognizable pagination param is present.
+    """
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query, keep_blank_values=True)
+
+    # page-number style
+    for key in qs:
+        if key.lower() in _PAGE_NUMBER_PARAMS:
+            try:
+                cur = int(qs[key][0])
+            except (ValueError, IndexError):
+                continue
+            qs[key] = [str(cur + 1)]
+            return urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
+
+    # offset/start style — only if we can determine the step from a page-size param
+    size = None
+    for key in qs:
+        if key.lower() in _PAGE_SIZE_PARAMS:
+            try:
+                size = int(qs[key][0])
+                break
+            except (ValueError, IndexError):
+                continue
+    if size:
+        for key in qs:
+            if key.lower() in _OFFSET_PARAMS:
+                try:
+                    cur = int(qs[key][0])
+                except (ValueError, IndexError):
+                    continue
+                qs[key] = [str(cur + size)]
+                return urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
+
+    return None
+
+
+def _append_page_param_url(url: str, page_num: int) -> str:
+    """Add/replace a ?page=N param — used to probe param-based pagination on a
+    URL that has no pagination param yet. Safe because if the site ignores the
+    param, the content is identical and the caller's hash check stops the loop.
+    """
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query, keep_blank_values=True)
+    qs["page"] = [str(page_num)]
+    return urlunparse(parsed._replace(query=urlencode(qs, doseq=True)))
 
 
 @dataclass
@@ -251,12 +322,21 @@ async def _extract_from_page_with_pagination(
     page: Page,
     company_name: str,
     source_label: str,
+    direct_listing: bool = False,
 ) -> list[PageSnapshot]:
-    """Extract snapshots from a page, following pagination if present."""
+    """Extract snapshots from a page, following pagination if present.
+
+    Pagination is attempted in two ways, in order:
+      1. Click-based — Next / Load More buttons (handles most job boards).
+      2. URL-parameter — increment an existing ?page=/?offset= param. In
+         direct-listing mode, if no such param exists yet, probe by appending
+         ?page=N (harmless: if ignored, the identical content stops the loop).
+    """
+    max_pages = _max_pagination_pages()
     snapshots = []
     seen_hashes = set()
 
-    for page_num in range(MAX_PAGINATION_PAGES):
+    for page_num in range(max_pages):
         await _scroll_full_page(page)
         snapshot = await _extract_page_snapshot(page)
 
@@ -269,9 +349,26 @@ async def _extract_from_page_with_pagination(
         label = f"{source_label} (page {page_num + 1})" if page_num > 0 else source_label
         print(f"    Captured: {label}")
 
-        # Try to go to next page
-        if not await _handle_pagination(page):
-            break
+        # 1) Click-based pagination (Next / Load More)
+        if await _handle_pagination(page):
+            continue
+
+        # 2) URL-parameter pagination fallback
+        next_url = _increment_param_url(page.url)
+        if next_url is None and direct_listing:
+            # No pagination param yet — probe the next page by appending one.
+            next_url = _append_page_param_url(page.url, page_num + 2)
+        if next_url and next_url != page.url:
+            try:
+                await page.goto(next_url, wait_until="domcontentloaded",
+                                timeout=PAGE_LOAD_TIMEOUT)
+                await asyncio.sleep(3)
+                await _dismiss_overlays(page)
+                continue
+            except Exception:
+                break
+
+        break
 
     return snapshots
 
@@ -281,12 +378,19 @@ async def navigate_and_extract(
     company_name: str,
     role_hints: list[str],
     llm_planner,
+    direct_listing: bool = False,
 ) -> list[PageSnapshot]:
     """Navigate a careers site and return page snapshots of ALL relevant job listing pages.
 
-    Two-phase approach:
+    Two-phase approach (default):
     1. Load careers page, ask LLM to identify ALL relevant department/category URLs
     2. Visit each URL and extract jobs (with pagination support)
+
+    Direct-listing mode (`direct_listing=True`):
+    - Skip the LLM department-discovery planner entirely and paginate the given
+      URL as-is. Use this for pre-filtered listing URLs (e.g. a Greenhouse board
+      with department/keyword query params) where department discovery would
+      navigate away and discard the user's filters.
 
     Handles:
     - Multi-department sites (Rubrik, Meta, Google)
@@ -316,6 +420,16 @@ async def navigate_and_extract(
             await asyncio.sleep(5)
             await _dismiss_overlays(page)
             await _scroll_full_page(page)
+
+            # Direct-listing mode: paginate this exact URL, no department discovery.
+            if direct_listing:
+                print("  Direct-listing mode — paginating this URL as-is "
+                      "(no department discovery)")
+                page_snapshots = await _extract_from_page_with_pagination(
+                    page, company_name, "listing", direct_listing=True
+                )
+                all_snapshots.extend(page_snapshots)
+                return all_snapshots
 
             # Phase 1: Ask LLM to analyze the page and create a navigation plan
             snapshot = await _extract_page_snapshot(page)
