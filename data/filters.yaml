@@ -2,6 +2,7 @@ preferences:
   - title: "Software Engineer"
     locations:
       - "Remote"
+      - "Cupertino"
       - "San Francisco"
       - "Seattle"
       - "San Jose"
@@ -72,6 +73,7 @@ preferences:
   - title: "AI Engineer"
     locations:
       - "Remote"
+      - "Cupertino"
       - "San Francisco"
       - "Seattle"
       - "San Jose"
@@ -118,6 +120,7 @@ preferences:
   - title: "AI/ML Engineer"
     locations:
       - "Remote"
+      - "Cupertino"
       - "San Francisco"
       - "Seattle"
       - "San Jose"
@@ -187,6 +190,7 @@ preferences:
   - title: "Machine Learning Engineer"
     locations:
       - "Remote"
+      - "Cupertino"
       - "San Francisco"
       - "Seattle"
       - "San Jose"
@@ -231,6 +235,7 @@ preferences:
       exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
 
   - title: "Research Engineer"
+
     locations:
       - "Remote"
       - "San Francisco"
@@ -251,6 +256,31 @@ preferences:
       min: 0
       max: 2
     keywords:
+      exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
+  
+  - title: "Software Development Engineer"
+    locations:
+      - "Remote"
+      - "San Francisco"
+      - "Seattle"
+      - "San Jose"
+      - "Mountain View"
+      - "Sunnyvale"
+      - "Palo Alto"
+      - "Fremont"
+      - "San Mateo"
+      - "Redwood City"
+      - "California"
+      - "Santa Clara"
+      - "Milpitas"
+      - "Menlo Park"
+      - "Burlingame"
+      - "Cupertino"
+    experience:
+      min: 0
+      max: 2
+    keywords:
+      include: ["python", "backend", "full stack", "fullstack", "ml", "ai", "systems"]
       exclude: ["senior", "staff", "principal", "lead", "director", "manager"]
 
 
